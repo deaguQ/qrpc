@@ -10,8 +10,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 @Slf4j
-public class SocketTransportClient implements TransportClient {
-    @Override
+public class SocketTransportClient  {
     public RpcResponse sendRequest(RpcRequest request, String host, int port) {
         try (Socket socket = new Socket(host, port)) {
             ObjectOutputStream objectOutputStream = new ObjectOutputStream(socket.getOutputStream());

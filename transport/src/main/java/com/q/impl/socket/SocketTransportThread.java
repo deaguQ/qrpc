@@ -1,5 +1,7 @@
 package com.q.impl.socket;
 
+import com.q.RequestHandler;
+import com.q.impl.ServiceManager;
 import com.q.proto.RpcRequest;
 import com.q.proto.RpcResponse;
 import com.q.utils.ProtoUtils;
@@ -14,10 +16,12 @@ import java.net.Socket;
 @Slf4j
 public class SocketTransportThread implements Runnable {
     private Socket socket;
-    private Object service;
-    public SocketTransportThread(Socket socket, Object service) {
+    private ServiceManager serviceManager;
+    private RequestHandler requestHandler;
+    public SocketTransportThread(Socket socket, ServiceManager serviceManager, RequestHandler requestHandler) {
         this.socket=socket;
-        this.service=service;
+        this.serviceManager=serviceManager;
+        this.requestHandler=requestHandler;
     }
 
     @Override
@@ -25,11 +29,11 @@ public class SocketTransportThread implements Runnable {
         try (ObjectInputStream objectInputStream = new ObjectInputStream(socket.getInputStream());
              ObjectOutputStream objectOutputStream = new ObjectOutputStream(socket.getOutputStream())) {
             RpcRequest rpcRequest = (RpcRequest) objectInputStream.readObject();
-            Method method = service.getClass().getMethod(rpcRequest.getMethodName(), rpcRequest.getParamTypes());
-            Object result = method.invoke(service, rpcRequest.getParameters());
+            Object service=serviceManager.getService(rpcRequest.getInterfaceName());
+            Object result = requestHandler.handle(rpcRequest, service);
             objectOutputStream.writeObject(ProtoUtils.successRpcResponse(result));
             objectOutputStream.flush();
-        } catch (IOException | ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+        } catch (IOException | ClassNotFoundException e) {
             log.error("调用或发送时有错误发生：", e);
         }
     }
