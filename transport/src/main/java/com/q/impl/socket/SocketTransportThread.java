@@ -29,7 +29,7 @@ public class SocketTransportThread implements Runnable {
         try (ObjectInputStream objectInputStream = new ObjectInputStream(socket.getInputStream());
              ObjectOutputStream objectOutputStream = new ObjectOutputStream(socket.getOutputStream())) {
             RpcRequest rpcRequest = (RpcRequest) objectInputStream.readObject();
-            Object service=serviceManager.getService(rpcRequest.getInterfaceName());
+            Object service=serviceManager.getService(rpcRequest.toServiceDescriptor());
             Object result = requestHandler.handle(rpcRequest, service);
             objectOutputStream.writeObject(ProtoUtils.successRpcResponse(result));
             objectOutputStream.flush();

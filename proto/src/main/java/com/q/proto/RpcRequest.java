@@ -29,7 +29,24 @@ public class RpcRequest implements Serializable {
      */
     private Class<?>[] paramTypes;
     /**
-     * 确定哪个实现类
+     * 用来处理一个接口有多个实现类的情况
      */
     private String group;
+    /**
+     * 唯一标识一个request
+     */
+    private String requestId;
+    /**
+     * 用来标识是否是心跳 1为心跳
+     */
+    private int rpcMessageType;
+
+    /**
+     * 唯一确定该调用哪个服务
+     * @return
+     */
+    public RpcServiceDescriptor toServiceDescriptor() {
+        return RpcServiceDescriptor.builder().serviceName(this.getInterfaceName())
+                .group(this.getGroup()).build();
+    }
 }

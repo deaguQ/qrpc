@@ -1,8 +1,10 @@
 package com.q.rpc;
 
+import com.q.proto.RpcServiceDescriptor;
+
 import java.net.InetSocketAddress;
 
 public interface RpcRegistry {
-    void register(String serviceName, InetSocketAddress inetSocketAddress);
-    InetSocketAddress lookupService(String serviceName);
+    InetSocketAddress lookupService(RpcServiceDescriptor rpcServiceDescriptor);
+    void publishService(RpcServiceDescriptor rpcServiceDescriptor,InetSocketAddress inetSocketAddress);
 }

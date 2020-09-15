@@ -2,6 +2,7 @@ package com.q.impl;
 
 import com.q.exception.RpcException;
 import com.q.message.RpcErrorMessage;
+import com.q.proto.RpcServiceDescriptor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,26 +11,28 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 管理本地服务的容器
+ */
 @Slf4j
 public class DefaultServiceManager implements ServiceManager {
 
     private final static Map<String, Object> serviceMap = new ConcurrentHashMap<>();
 
     @Override
-    public synchronized <T> void register(T service) {
-        Class<?>[] interfaces = service.getClass().getInterfaces();
-        if(interfaces.length == 0) {
-            throw new RpcException(RpcErrorMessage.SERVICE_NOT_IMPLEMENT_ANY_INTERFACE);
+    public <T> void register(T service, RpcServiceDescriptor serviceDescriptor) {
+        String rpcServiceName = serviceDescriptor.toRpcServiceName();
+        if (serviceMap.containsKey(rpcServiceName)) {
+            return;
         }
-        for(Class<?> i : interfaces) {
-            serviceMap.put(i.getCanonicalName(), service);
-        }
+        serviceMap.put(rpcServiceName, service);
+        log.info("Add service: {} and interfaces:{}", rpcServiceName, service.getClass().getInterfaces());
     }
 
     @Override
-    public synchronized Object getService(String serviceName) {
-        Object service = serviceMap.get(serviceName);
-        if(service == null) {
+    public Object getService(RpcServiceDescriptor serviceDescriptor) {
+        Object service = serviceMap.get(serviceDescriptor.toRpcServiceName());
+        if (null == service) {
             throw new RpcException(RpcErrorMessage.SERVICE_CAN_NOT_BE_FOUND);
         }
         return service;

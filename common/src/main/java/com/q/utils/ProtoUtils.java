@@ -18,7 +18,15 @@ public class ProtoUtils {
         response.setData(data);
         return response;
     }
-
+    public static <T> RpcResponse<T> successRpcResponse(T data,String requestId){
+        RpcResponse<T> response = new RpcResponse<>();
+        response.setStatusCode(successCode);
+        if(null!=data){
+            response.setData(data);
+        }
+        response.setRequestId(requestId);
+        return response;
+    }
     /**
      * 获得失败响应
      * @param msg 提示信息

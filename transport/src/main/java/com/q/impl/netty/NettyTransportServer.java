@@ -2,12 +2,14 @@ package com.q.impl.netty;
 
 import com.q.ShutdownHook;
 import com.q.exception.RpcException;
+import com.q.factory.SingletonFactory;
 import com.q.impl.AbstractAutoTransportServer;
 import com.q.impl.DefaultServiceManager;
 import com.q.impl.ServiceManager;
 import com.q.impl.annotations.Service;
 import com.q.impl.annotations.ServiceScan;
 import com.q.message.RpcErrorMessage;
+import com.q.proto.RpcServiceDescriptor;
 import com.q.rpc.CommonDecoder;
 import com.q.rpc.CommonEncoder;
 import com.q.rpc.RpcRegistry;
@@ -21,26 +23,30 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class NettyTransportServerAbstract extends AbstractAutoTransportServer {
+public class NettyTransportServer extends AbstractAutoTransportServer {
     private String host;
     private int port;
     private ServiceManager serviceManager;
     private RpcRegistry rpcRegistry;
-    public NettyTransportServerAbstract(String host, int port){
+    public NettyTransportServer(String host, int port){
         this.host=host;
         this.port=port;
-        serviceManager=new DefaultServiceManager();
-        this.rpcRegistry=new ZkRegistry();
+        serviceManager= SingletonFactory.getInstance(DefaultServiceManager.class);
+        this.rpcRegistry=SingletonFactory.getInstance(ZkRegistry.class);
         scanServices();
     }
     @Override
     public void start() {
+        //todo 自动注销服务好像不起作用
+        ShutdownHook.getShutdownHook().addClearAllHook();
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -49,6 +55,10 @@ public class NettyTransportServerAbstract extends AbstractAutoTransportServer {
             serverBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .handler(new LoggingHandler(LogLevel.INFO))
+                    // TCP默认开启了 Nagle 算法，该算法的作用是尽可能的发送大数据快，减少网络传输。TCP_NODELAY 参数的作用就是控制是否启用 Nagle 算法。
+                    .childOption(ChannelOption.TCP_NODELAY, true)
+                    // 是否开启 TCP 底层心跳机制
+                    .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .option(ChannelOption.SO_BACKLOG, 256)
                     .option(ChannelOption.SO_KEEPALIVE, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
@@ -56,27 +66,28 @@ public class NettyTransportServerAbstract extends AbstractAutoTransportServer {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
+                            //心跳功能，30 秒之内没有收到客户端请求的话就关闭连接
+                            pipeline.addLast(new IdleStateHandler(30, 0, 0, TimeUnit.SECONDS));
                             pipeline.addLast(new CommonEncoder(new KryoSerializer()));
                             pipeline.addLast(new CommonDecoder());
                             pipeline.addLast(new NettyServerHandler());
                         }
                     });
             ChannelFuture future = serverBootstrap.bind(host,port).sync();
-            //todo 好像不起作用
-            ShutdownHook.getShutdownHook().addClearAllHook();
             future.channel().closeFuture().sync();
 
         } catch (InterruptedException e) {
             log.error("启动服务器时有错误发生: ", e);
         } finally {
+            log.error("shutdown bossGroup and workerGroup");
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
     }
     @Override
-    public <T> void publishService(Object service, Class<T> serviceClass) {
-        serviceManager.register(service);
-        rpcRegistry.register(serviceClass.getCanonicalName(), new InetSocketAddress(host, port));
+    public <T> void publishService(Object service, RpcServiceDescriptor serviceDescriptor) {
+        serviceManager.register(service,serviceDescriptor);
+        rpcRegistry.publishService(serviceDescriptor, new InetSocketAddress(host, port));
     }
 
     @Override
@@ -101,7 +112,7 @@ public class NettyTransportServerAbstract extends AbstractAutoTransportServer {
         Set<Class<?>> classSet = ReflectionUtils.getClasses(basePackage);
         for(Class<?> clazz : classSet) {
             if(clazz.isAnnotationPresent(Service.class)) {
-                String serviceName = clazz.getAnnotation(Service.class).name();
+                String group = clazz.getAnnotation(Service.class).group();
                 Object obj;
                 try {
                     obj = clazz.newInstance();
@@ -109,16 +120,17 @@ public class NettyTransportServerAbstract extends AbstractAutoTransportServer {
                     log.error("创建 " + clazz + " 时有错误发生");
                     continue;
                 }
-                if("".equals(serviceName)) {
+                //有没有group属性标识不同的实现类
+                if("".equals(group)) {
                     Class<?>[] interfaces = clazz.getInterfaces();
                     for (Class<?> oneInterface: interfaces){
-                        publishService(obj, oneInterface);
+                        publishService(obj, RpcServiceDescriptor.builder().serviceName(oneInterface.getCanonicalName()).group("").build());
                     }
                 } else {
-                    //todo 自定义服务名
+                    //
                     Class<?>[] interfaces = clazz.getInterfaces();
                     for (Class<?> oneInterface: interfaces){
-                        publishService(obj, oneInterface);
+                        publishService(obj, RpcServiceDescriptor.builder().serviceName(oneInterface.getCanonicalName()).group(group).build());
                     }
                 }
             }

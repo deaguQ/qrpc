@@ -18,6 +18,10 @@ public class RpcResponse<T> implements Serializable {
      * 响应数据
      */
     private T data;
+    /**
+     * 对应的requestId
+     */
+    private String requestId;
 
 }
 

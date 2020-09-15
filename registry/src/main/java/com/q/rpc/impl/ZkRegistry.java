@@ -2,13 +2,16 @@ package com.q.rpc.impl;
 
 import com.q.exception.RpcException;
 import com.q.message.RpcErrorMessage;
+import com.q.proto.RpcServiceDescriptor;
 import com.q.rpc.LoadBalance;
 import com.q.rpc.RpcRegistry;
 import com.q.utils.CuratorUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.curator.framework.CuratorFramework;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.List;
 @Slf4j
 public class ZkRegistry implements RpcRegistry {
@@ -19,15 +22,10 @@ public class ZkRegistry implements RpcRegistry {
     public ZkRegistry(LoadBalance loadBalance){
         this.loadBalance=loadBalance;
     }
-    @Override
-    public void register(String serviceName, InetSocketAddress inetSocketAddress) {
-        String servicePath = CuratorUtils.ZK_REGISTER_ROOT_PATH + "/" + serviceName + inetSocketAddress.toString();
-        CuratorFramework zkClient = CuratorUtils.getZkClient();
-        CuratorUtils.createPersistentNode(zkClient, servicePath);
-    }
 
     @Override
-    public InetSocketAddress lookupService(String serviceName) {
+    public InetSocketAddress lookupService(RpcServiceDescriptor rpcServiceDescriptor) {
+        String serviceName=rpcServiceDescriptor.toRpcServiceName();
         CuratorFramework zkClient = CuratorUtils.getZkClient();
         List<String> serviceUrlList = CuratorUtils.getChildrenNodes(zkClient, serviceName);
         if (serviceUrlList.size() == 0) {
@@ -40,4 +38,12 @@ public class ZkRegistry implements RpcRegistry {
         int port = Integer.parseInt(socketAddressArray[1]);
         return new InetSocketAddress(host, port);
     }
+    //  一个类有多个接口，所有要对每个接口都注册一遍；而一个接口有多个实现类，所以要加上group确定唯一的实现类
+    @Override
+    public void publishService(RpcServiceDescriptor rpcServiceDescriptor,InetSocketAddress inetSocketAddress) {
+        String servicePath = CuratorUtils.ZK_REGISTER_ROOT_PATH + "/" + rpcServiceDescriptor.toRpcServiceName() + inetSocketAddress.toString();
+        CuratorFramework zkClient = CuratorUtils.getZkClient();
+        CuratorUtils.createPersistentNode(zkClient, servicePath);
+    }
+
 }
