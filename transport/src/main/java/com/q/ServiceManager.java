@@ -1,8 +1,8 @@
-package com.q.impl;
+package com.q;
 
 import com.q.proto.RpcServiceDescriptor;
 
-//用来管理本地服务
+//本地服务注册与发现
 public interface ServiceManager {
     <T> void register(T service,RpcServiceDescriptor toServiceDescriptor);
 

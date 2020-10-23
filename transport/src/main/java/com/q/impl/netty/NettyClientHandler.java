@@ -1,9 +1,12 @@
 package com.q.impl.netty;
 
 import com.q.Common;
+import com.q.TransportClient;
 import com.q.factory.SingletonFactory;
 import com.q.proto.RpcRequest;
 import com.q.proto.RpcResponse;
+import com.q.rpc.RpcRegistry;
+import com.q.rpc.impl.ZkRegistry;
 import io.netty.channel.*;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -14,11 +17,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class NettyClientHandler extends ChannelInboundHandlerAdapter {
     private final UnprocessedRequests unprocessedRequests;
     private final ChannelContainer channelContainer;
+    private static NettyTransportClient nettyClient= SingletonFactory.getInstance(NettyTransportClient.class);
+    private static final RpcRegistry rpcRegistry=SingletonFactory.getInstance(ZkRegistry.class);;
+    private AtomicInteger timeoutCount = new AtomicInteger(0);
+
     public NettyClientHandler() {
         this.unprocessedRequests = SingletonFactory.getInstance(UnprocessedRequests.class);
         this.channelContainer=SingletonFactory.getInstance(ChannelContainer.class);
@@ -27,12 +35,17 @@ public class NettyClientHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         try {
             log.info("client receive msg: [{}]", msg);
+            timeoutCount.set(0);
             if (msg instanceof RpcResponse) {
                 RpcResponse<Object> rpcResponse = (RpcResponse<Object>) msg;
-                unprocessedRequests.complete(rpcResponse);
+                if (rpcResponse.getRpcMessageType() == Common.HEART_BEAT) {
+                    log.info("接收到服务端心跳响应");
+                }
+                else{
+                    unprocessedRequests.complete(rpcResponse);
+                }
+
             }
-            //不能关闭channel
-//            ctx.channel().close();
         } finally {
             ReferenceCountUtil.release(msg);
         }
@@ -41,14 +54,16 @@ public class NettyClientHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
-            IdleState state = ((IdleStateEvent) evt).state();
-            if (state == IdleState.WRITER_IDLE) {
-                // 重新连接并发送心跳
-                //todo 一直连接不上则切换服务器
-                log.info("write idle happen [{}]", ctx.channel().remoteAddress());
-                Channel channel = NettyTransportClient.doConnect((InetSocketAddress) ctx.channel().remoteAddress());
-                RpcRequest rpcRequest = RpcRequest.builder().rpcMessageType(Common.HEART_BEAT).build();
-                channel.writeAndFlush(rpcRequest).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+            if (((IdleStateEvent) evt).state().equals(IdleStateEvent.WRITER_IDLE_STATE_EVENT)) {
+                // 收不到服务端相应一段时间后则发送心跳,连续收不到则进行重连
+                if (timeoutCount.getAndIncrement() >= Common.HEART_BEAT_TIME_OUT_MAX_TIME){
+                    nettyClient.reConnect();
+                }else{
+                    log.info("write idle happen [{}]", ctx.channel().remoteAddress());
+                    RpcRequest rpcRequest = RpcRequest.builder().rpcMessageType(Common.HEART_BEAT).build();
+                    ctx.writeAndFlush(rpcRequest);
+                }
+
 
             }
         } else {

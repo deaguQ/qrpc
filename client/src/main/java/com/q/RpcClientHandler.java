@@ -1,5 +1,6 @@
 package com.q;
 
+import com.q.factory.SingletonFactory;
 import com.q.impl.netty.NettyTransportClient;
 import com.q.impl.socket.SocketTransportClient;
 import com.q.proto.RpcRequest;
@@ -13,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 public class RpcClientHandler implements InvocationHandler {
     private boolean useNetty;
     private String group;
+    private static TransportClient nettyClient= SingletonFactory.getInstance(NettyTransportClient.class);
     public RpcClientHandler(boolean useNetty,String group){
         this.useNetty=useNetty;
         this.group=group;
@@ -29,11 +31,11 @@ public class RpcClientHandler implements InvocationHandler {
                 .build();
         TransportClient transportClient;
         if(!useNetty){
-//            transportClient=new SocketTransportClient();
+            //todo socket
             transportClient=null;
         }
         else{
-            transportClient=new NettyTransportClient();
+            transportClient=nettyClient;
         }
         CompletableFuture<RpcResponse> completableFuture = (CompletableFuture<RpcResponse>) transportClient.sendRequest(rpcRequest);
         return completableFuture.get().getData();

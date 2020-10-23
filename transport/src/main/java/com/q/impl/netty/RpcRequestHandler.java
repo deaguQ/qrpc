@@ -3,11 +3,8 @@ package com.q.impl.netty;
 import com.q.RequestHandler;
 import com.q.exception.RpcException;
 import com.q.factory.SingletonFactory;
-import com.q.impl.DefaultServiceManager;
-import com.q.impl.ServiceManager;
-import com.q.message.RpcErrorMessage;
+import com.q.ServiceManager;
 import com.q.proto.RpcRequest;
-import com.q.utils.ProtoUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationTargetException;

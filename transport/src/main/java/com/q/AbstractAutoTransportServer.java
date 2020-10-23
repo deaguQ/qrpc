@@ -1,4 +1,4 @@
-package com.q.impl;
+package com.q;
 
 import com.q.TransportServer;
 

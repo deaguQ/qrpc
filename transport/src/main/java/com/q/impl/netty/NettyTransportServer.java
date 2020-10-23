@@ -3,9 +3,8 @@ package com.q.impl.netty;
 import com.q.ShutdownHook;
 import com.q.exception.RpcException;
 import com.q.factory.SingletonFactory;
-import com.q.impl.AbstractAutoTransportServer;
-import com.q.impl.DefaultServiceManager;
-import com.q.impl.ServiceManager;
+import com.q.AbstractAutoTransportServer;
+import com.q.ServiceManager;
 import com.q.impl.annotations.Service;
 import com.q.impl.annotations.ServiceScan;
 import com.q.message.RpcErrorMessage;
@@ -45,7 +44,7 @@ public class NettyTransportServer extends AbstractAutoTransportServer {
     }
     @Override
     public void start() {
-        //todo 自动注销服务好像不起作用
+        //服务端正常关闭时注销所有注册服务
         ShutdownHook.getShutdownHook().addClearAllHook();
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -55,19 +54,18 @@ public class NettyTransportServer extends AbstractAutoTransportServer {
             serverBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .handler(new LoggingHandler(LogLevel.INFO))
+                    .option(ChannelOption.SO_BACKLOG, 256)
+                    .option(ChannelOption.SO_KEEPALIVE, true)
                     // TCP默认开启了 Nagle 算法，该算法的作用是尽可能的发送大数据快，减少网络传输。TCP_NODELAY 参数的作用就是控制是否启用 Nagle 算法。
                     .childOption(ChannelOption.TCP_NODELAY, true)
                     // 是否开启 TCP 底层心跳机制
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
-                    .option(ChannelOption.SO_BACKLOG, 256)
-                    .option(ChannelOption.SO_KEEPALIVE, true)
-                    .childOption(ChannelOption.TCP_NODELAY, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
                             //心跳功能，30 秒之内没有收到客户端请求的话就关闭连接
-                            pipeline.addLast(new IdleStateHandler(30, 0, 0, TimeUnit.SECONDS));
+                            pipeline.addLast(new IdleStateHandler(120, 120, 120, TimeUnit.SECONDS));
                             pipeline.addLast(new CommonEncoder(new KryoSerializer()));
                             pipeline.addLast(new CommonDecoder());
                             pipeline.addLast(new NettyServerHandler());
@@ -120,9 +118,10 @@ public class NettyTransportServer extends AbstractAutoTransportServer {
                     log.error("创建 " + clazz + " 时有错误发生");
                     continue;
                 }
-                //有没有group属性标识不同的实现类
+                //增加group属性标识同一接口不同的实现类
                 if("".equals(group)) {
                     Class<?>[] interfaces = clazz.getInterfaces();
+
                     for (Class<?> oneInterface: interfaces){
                         publishService(obj, RpcServiceDescriptor.builder().serviceName(oneInterface.getCanonicalName()).group("").build());
                     }

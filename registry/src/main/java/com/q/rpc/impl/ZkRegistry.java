@@ -45,5 +45,9 @@ public class ZkRegistry implements RpcRegistry {
         CuratorFramework zkClient = CuratorUtils.getZkClient();
         CuratorUtils.createPersistentNode(zkClient, servicePath);
     }
+    //todo 服务端节点下线时回调方法,更新地址列表
+    public void call(){
+
+    }
 
 }
